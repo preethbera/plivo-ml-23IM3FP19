@@ -64,23 +64,5 @@
         <li><strong>Exp 5 (ALiBi + Scale Up):</strong> 1.8616 BPB. Eliminated learned pos embeddings for ALiBi and scaled architecture to 6 layers (1.93M parameters). Best performance.</li>
     </ul>
 
-    <h2>Division of Effort (Human vs. Machine)</h2>
-    <h3>Human (Developer)</h3>
-    <ul>
-        <li>Directed the strict iterative workflow, controlled code versions, and executed terminal commands.</li>
-        <li>Identified the necessity of the custom BPE tokenizer due to Hindi byte sequences and prioritized its deployment.</li>
-        <li>Proposed ALiBi over standard attention to squeeze maximum parameters out of the model constraints.</li>
-        <li>Provided feedback on experiment failures and enforced strict comparisons.</li>
-    </ul>
-    
-    <h3>Machine (AI Assistant)</h3>
-    <ul>
-        <li>Wrote the <code>tokenizer_train.py</code> script from scratch to implement BPE natively.</li>
-        <li>Rewrote <code>tokenizer.py</code> to apply merges sequentially and maintain UTF-8 byte fallback.</li>
-        <li>Implemented the complex ALiBi distance bias mask inside the <code>SelfAttention</code> layer in pure PyTorch.</li>
-        <li>Modified the training loop to correctly implement gradient accumulation, clipping, and scale the `Config` layers accurately.</li>
-        <li>Documented all experiment results and conclusions objectively into the <code>RUNLOG.md</code>.</li>
-    </ul>
-
 </body>
 </html>
