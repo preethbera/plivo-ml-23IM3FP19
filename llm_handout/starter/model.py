@@ -10,13 +10,13 @@ import torch.nn.functional as F
 
 
 class Config:
-    vocab_size = 256      # byte-level tokenizer default
+    vocab_size = 512      # BPE tokenizer default
     block_size = 128
-    n_layer = 4
+    n_layer = 6
     n_head = 4
     n_embd = 160
     dropout = 0.0
-    tie_weights = False   # <- one of many things worth questioning
+    tie_weights = True    # <- one of many things worth questioning
 
 
 class SelfAttention(nn.Module):
@@ -33,7 +33,18 @@ class SelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
-        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        
+        m = torch.arange(1, self.n_head + 1, device=x.device)
+        slopes = 1.0 / (2.0 ** (8.0 * m / self.n_head))
+        col = torch.arange(T, device=x.device).view(1, T)
+        row = torch.arange(T, device=x.device).view(T, 1)
+        dist = col - row
+        alibi = slopes.view(1, self.n_head, 1, 1) * dist.view(1, 1, T, T)
+        
+        causal_mask = torch.triu(torch.full((T, T), float('-inf'), device=x.device), diagonal=1)
+        attn_mask = alibi + causal_mask.view(1, 1, T, T)
+        
+        y = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.drop(self.proj(y))
 
@@ -59,7 +70,6 @@ class GPT(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.n_embd)
-        self.pos_emb = nn.Embedding(cfg.block_size, cfg.n_embd)
         self.drop = nn.Dropout(cfg.dropout)
         self.blocks = nn.ModuleList(Block(cfg) for _ in range(cfg.n_layer))
         self.ln_f = nn.LayerNorm(cfg.n_embd)
@@ -77,8 +87,7 @@ class GPT(nn.Module):
 
     def forward(self, idx, targets=None):
         B, T = idx.shape
-        pos = torch.arange(T, device=idx.device)
-        x = self.drop(self.tok_emb(idx) + self.pos_emb(pos)[None, :, :])
+        x = self.drop(self.tok_emb(idx))
         for blk in self.blocks:
             x = blk(x)
         logits = self.head(self.ln_f(x))

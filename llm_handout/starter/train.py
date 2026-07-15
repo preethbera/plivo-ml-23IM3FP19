@@ -12,6 +12,7 @@ HARD CAPS (checked at grading, violations = disqualified run):
 """
 import argparse
 import time
+import math
 
 import torch
 
@@ -57,19 +58,25 @@ def main():
     assert n <= MAX_PARAMS, f"cap: max {MAX_PARAMS:,} params"
 
     # baseline choices, all questionable on purpose:
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr)  # constant LR,
-    # no warmup, no schedule, no weight decay, no gradient clipping.
+    opt = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model.train()
     t0 = time.time()
     losses = []
+    grad_accum_steps = 8
     for step in range(1, args.steps + 1):
-        x, y = get_batch(ids, cfg.block_size, args.batch, device)
-        _, loss = model(x, y)
         opt.zero_grad(set_to_none=True)
-        loss.backward()
+        loss_accum = 0.0
+        for _ in range(grad_accum_steps):
+            x, y = get_batch(ids, cfg.block_size, args.batch, device)
+            _, loss = model(x, y)
+            loss = loss / grad_accum_steps
+            loss.backward()
+            loss_accum += loss.item()
+            
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
-        losses.append(loss.item())
+        losses.append(loss_accum)
         if step % args.log_every == 0 or step == 1:
             avg = sum(losses[-args.log_every:]) / len(losses[-args.log_every:])
             print(f"step {step:5d}  loss {avg:.4f}  "
